@@ -2,47 +2,52 @@ from pathlib import Path
 import pandas as pd
 
 
-def preprocess_split(df: pd.DataFrame) -> pd.DataFrame:
+def preprocess_scifact():
     """
-    对一个 split 做简单预处理：
-    - 保留 sentence1, sentence2, score
-    - 去掉缺失行
-    - score 转为 float，并加一个归一化列 score_norm (0~1)
-    - 去掉前后空格
+    读取 data/raw/scifact_raw.csv，做简单清洗，生成：
+      - scifact_pairs.csv  : 每行一个 (query, doc) 对
+      - scifact_corpus.csv : 去重后的文档库（doc_id, content）
     """
-    # 只保留核心列
-    cols = ["sentence1", "sentence2", "score"]
-    df = df[cols].dropna().copy()
-
-    # 处理评分
-    df["score"] = df["score"].astype(float)
-    df["score_norm"] = df["score"] / 5.0
-
-    # 清理文本（去掉首尾空格）
-    df["sentence1"] = df["sentence1"].astype(str).str.strip()
-    df["sentence2"] = df["sentence2"].astype(str).str.strip()
-
-    return df
-
-
-def main():
-    # 项目根目录
-    root = Path(__file__).resolve().parents[1]
-    raw_dir = root / "data" / "raw"
-    processed_dir = root / "data" / "processed"
+    project_root = Path(__file__).resolve().parents[1]
+    raw_dir = project_root / "data" / "raw"
+    processed_dir = project_root / "data" / "processed"
     processed_dir.mkdir(parents=True, exist_ok=True)
 
-    for split in ["train", "validation", "test"]:
-        raw_path = raw_dir / f"sts_{split}_raw.csv"
-        if not raw_path.exists():
-            continue
+    raw_path = raw_dir / "scifact_raw.csv"
+    df = pd.read_csv(raw_path)
 
-        df_raw = pd.read_csv(raw_path)
-        df_clean = preprocess_split(df_raw)
+    # 只保留我们关心的列
+    cols = ["_id", "title", "text", "query"]
+    df = df[cols].copy()
 
-        out_path = processed_dir / f"sts_{split}_clean.csv"
-        df_clean.to_csv(out_path, index=False)
+    # 去掉没有 text 或没有 query 的样本
+    df = df.dropna(subset=["text", "query"])
+
+    # 改名，方便后面使用
+    df = df.rename(columns={"_id": "doc_id"})
+
+    # 简单清洗一下字符串
+    df["title"] = df["title"].fillna("").astype(str).str.strip()
+    df["text"] = df["text"].fillna("").astype(str).str.strip()
+    df["query"] = df["query"].astype(str).str.strip()
+
+    # 拼接一个 content 字段：后面 BM25 和 embedding 都用它当文档内容
+    df["content"] = df["title"] + ". " + df["text"]
+
+    # 给每条 (query, doc) 对一个 query_id
+    df = df.reset_index(drop=True)
+    df["query_id"] = df.index
+
+    # 1️⃣ 保存 pairs：后面训练 dense retriever / 做评估都用这个
+    pairs_path = processed_dir / "scifact_pairs.csv"
+    df.to_csv(pairs_path, index=False)
+
+    # 2️⃣ 保存去重后的 corpus：每个 doc_id 一条，用来建索引 / 向量库
+    corpus = df[["doc_id", "content"]].drop_duplicates(subset=["doc_id"]).reset_index(drop=True)
+    corpus_path = processed_dir / "scifact_corpus.csv"
+    corpus.to_csv(corpus_path, index=False)
 
 
 if __name__ == "__main__":
-    main()
+    preprocess_scifact()
+
