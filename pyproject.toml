@@ -5,6 +5,7 @@ description = "A semantic retrieval system using deep learning."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "beir>=2.2.0",
     "bm25s>=0.2.14",
     "datasets>=4.4.1",
     "matplotlib>=3.10.7",
@@ -14,6 +15,7 @@ dependencies = [
     "pystemmer>=3.0.0",
     "rank-bm25>=0.2.2",
     "scikit-learn>=1.7.2",
+    "sentence-transformers>=5.2.0",
     "torch>=2.9.1",
     "torchvision>=0.24.1",
 ]
