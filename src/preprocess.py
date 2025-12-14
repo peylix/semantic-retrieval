@@ -12,7 +12,9 @@ def preprocess_scifact():
       - BEIR formatted data (for dense retrieval):
         - corpus.jsonl : corpus
         - queries.jsonl : queries
-        - qrels/train.tsv : query-document relevance labels
+        - qrels/train.tsv : query-document relevance labels (70%)
+        - qrels/dev.tsv : query-document relevance labels (10%)
+        - qrels/test.tsv : query-document relevance labels (20%)
     """
     project_root = Path(__file__).resolve().parents[1]
     raw_dir = project_root / "data" / "raw"
@@ -87,14 +89,23 @@ def preprocess_scifact():
             query = {"_id": str(row["query_id"]), "text": row["query"]}
             f.write(json.dumps(query, ensure_ascii=False) + "\n")
 
-    # Generate qrels/train.tsv and qrels/test.tsv (query-document relevance labels)
+    # Generate qrels/train.tsv, qrels/dev.tsv and qrels/test.tsv (query-document relevance labels)
     # Split by query_id to keep all documents for the same query in one split
+    # Split ratio: train=70%, dev=10%, test=20%
     unique_query_ids = df["query_id"].unique()
-    train_query_ids, test_query_ids = train_test_split(
+
+    # First split: separate test set (20%)
+    train_dev_query_ids, test_query_ids = train_test_split(
         unique_query_ids, test_size=0.2, random_state=42
     )
 
+    # Second split: separate dev set from train (10% of total = 12.5% of remaining 80%)
+    train_query_ids, dev_query_ids = train_test_split(
+        train_dev_query_ids, test_size=0.125, random_state=42
+    )
+
     train_df = df[df["query_id"].isin(train_query_ids)]
+    dev_df = df[df["query_id"].isin(dev_query_ids)]
     test_df = df[df["query_id"].isin(test_query_ids)]
 
     # Write train.tsv
@@ -102,6 +113,12 @@ def preprocess_scifact():
     with open(train_qrels_path, "w", encoding="utf-8") as f:
         for _, row in train_df.iterrows():
             # Every query-doc pair is marked as relevant (score=1)
+            f.write(f"{row['query_id']}\t{row['doc_id']}\t1\n")
+
+    # Write dev.tsv
+    dev_qrels_path = qrels_dir / "dev.tsv"
+    with open(dev_qrels_path, "w", encoding="utf-8") as f:
+        for _, row in dev_df.iterrows():
             f.write(f"{row['query_id']}\t{row['doc_id']}\t1\n")
 
     # Write test.tsv
@@ -118,6 +135,9 @@ def preprocess_scifact():
     print(f"   - queries.jsonl: {len(unique_queries)} queries")
     print(
         f"   - qrels/train.tsv: {len(train_df)} relevance labels ({len(train_query_ids)} queries)"
+    )
+    print(
+        f"   - qrels/dev.tsv: {len(dev_df)} relevance labels ({len(dev_query_ids)} queries)"
     )
     print(
         f"   - qrels/test.tsv: {len(test_df)} relevance labels ({len(test_query_ids)} queries)"
