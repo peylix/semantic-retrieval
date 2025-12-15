@@ -1,65 +1,135 @@
 # scripts/run_word2vec_eval.py
-# Run Word2Vec retrieval baseline evaluation on SciFact
-# - 读取 preprocess 输出的 scifact_pairs.csv / scifact_corpus.csv
-# - 对每个 query 取 top-k doc_id
-# - 构造 samples 给 traditional_eval 评估
+# ============================================================
+# Word2Vec retrieval baseline evaluation (BEIR-format)
+# - Train Word2Vec ONLY on docs from qrels/train.tsv (no leakage)
+# - Evaluate on queries in qrels/test.tsv
+# - Use evaluation.traditional_eval (supports multi-ground-truth)
+# ============================================================
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Dict, Set
+import json
 import pandas as pd
 
-from Word2Vec_Baseline import Word2VecRetriever   # ✅ 改这里
+from Word2Vec_Baseline import Word2VecRetriever
 from evaluation import traditional_eval
+
+
+def load_queries_jsonl(path: Path) -> Dict[str, str]:
+    """
+    queries.jsonl: {"_id": "...", "text": "..."} (or "id")
+    -> {query_id: query_text}
+    """
+    q: Dict[str, str] = {}
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            obj = json.loads(line)
+            qid = str(obj.get("_id", obj.get("id")))
+            text = str(obj.get("text", "")).strip()
+            if qid and text:
+                q[qid] = text
+    return q
+
+
+def load_qrels_no_header(path: Path) -> Dict[str, Set[str]]:
+    """
+    qrels/*.tsv (NO header): query_id \t doc_id \t relevance
+    -> {query_id: set(relevant_doc_ids)}
+    """
+    df = pd.read_csv(path, sep="\t", header=None, names=["query_id", "doc_id", "relevance"])
+    df = df[df["relevance"] > 0]
+
+    gt: Dict[str, Set[str]] = {}
+    for qid, group in df.groupby("query_id"):
+        gt[str(qid)] = set(group["doc_id"].astype(str).tolist())
+    return gt
+
 
 def main():
     print("[1] script started")
-    # Part A: 定位数据路径
-    project_root = Path(__file__).resolve().parents[1]
-    processed_dir = project_root / "data" / "processed"
 
-    corpus_csv = processed_dir / "scifact_corpus.csv"
-    pairs_csv  = processed_dir / "scifact_pairs.csv"
+    # -------------------------
+    # Part A: paths (your BEIR format)
+    # -------------------------
+    project_root = Path(r"D:\project\semantic-retrieval")
+    beir_dir = project_root / "data" / "processed" / "beir_format"
+    qrels_dir = beir_dir / "qrels"
 
-    # Part B: 初始化 Word2Vec Retriever
-    print("[2] building retriever (training word2vec + doc embeddings)...")
+    corpus_path = beir_dir / "corpus.jsonl"
+    queries_path = beir_dir / "queries.jsonl"
+    train_qrels = qrels_dir / "train.tsv"
+    test_qrels  = qrels_dir / "test.tsv"
 
+    # -------------------------
+    # Part B: load queries + test qrels
+    # -------------------------
+    print("[2] loading queries + test qrels...")
+    queries = load_queries_jsonl(queries_path)
+    gt_test = load_qrels_no_header(test_qrels)
+    print(f"[2] queries loaded: {len(queries)}")
+    print(f"[2] test qids with qrels: {len(gt_test)}")
+
+    # -------------------------
+    # Part C: build retriever (train on train.tsv only)
+    # -------------------------
+    print("[3] building retriever (train word2vec on train qrels docs only)...")
     retriever = Word2VecRetriever(
-        corpus_csv_path=corpus_csv,
+        corpus_path=corpus_path,
+        train_qrels_tsv_path=train_qrels,
         vector_size=300,
         window=5,
         min_count=2,
         sg=1,
         workers=4,
+        model_path=beir_dir / "w2v_train_only.model",  # cache model
+        rebuild_model=False,
     )
-    print("[3] retriever ready")
+    print("[4] retriever ready")
 
-    # Part C: 构造评测 samples
-    print("[4] loading pairs csv")
-
-    df_pairs = pd.read_csv(pairs_csv)
-
+    # -------------------------
+    # Part D: build samples for evaluation.py
+    # -------------------------
     k = 10
     samples = []
-    for _, row in df_pairs.iterrows():
-        query = str(row["query"])
-        gt_doc_id = str(row["doc_id"])
+    missing_q = 0
 
-        top_docs = retriever.retrieve(query, top_k=k)
+    print("[5] retrieving & building samples...")
+    for i, (qid, gt_docs) in enumerate(gt_test.items(), start=1):
+        qtext = queries.get(str(qid))
+        if not qtext:
+            missing_q += 1
+            continue
+
+        top_docs = retriever.retrieve(qtext, top_k=k)
 
         samples.append({
-            "question": query,
-            "contexts": top_docs,       # 这里存 doc_id list（排名顺序）
-            "ground_truth": gt_doc_id,  # 单个正确 doc_id
+            "question": qtext,
+            "contexts": top_docs,     # List[str] ranked doc_ids
+            "ground_truth": gt_docs,  # Set[str] multi relevant
         })
 
-    # Part D: 运行评估
-    print("[5] running evaluation")
+        if i % 200 == 0:
+            print(f"[5] processed {i}/{len(gt_test)}")
 
+    print(f"[5] done. missing query text: {missing_q}")
+
+    # -------------------------
+    # Part E: evaluate via evaluation.py
+    # -------------------------
+    print("[6] running evaluation via evaluation.py...")
     metrics = traditional_eval(samples, k=k)
-    print("=== Word2Vec Retrieval Baseline ===")
+
+    print("=== Word2Vec Retrieval Baseline (BEIR train/test) ===")
     for key, val in metrics.items():
-        print(f"{key}: {val:.4f}")
+        # N 是 float（我之前改成 float 了），打印时做兼容
+        if key == "N":
+            print(f"{key}: {int(val)}")
+        else:
+            print(f"{key}: {val:.4f}")
 
 
 if __name__ == "__main__":
