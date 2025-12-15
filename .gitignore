@@ -213,3 +213,6 @@ data/
 results/
 models/
 checkpoints/
+
+#macOS
+.DS_Store
