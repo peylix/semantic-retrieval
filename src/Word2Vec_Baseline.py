@@ -26,17 +26,6 @@ def sentence_embedding(text: str, w2v: Word2Vec) -> np.ndarray:
 
 
 class Word2VecRetriever:
-    """
-    Train Word2Vec on TRAIN qrels documents only (no test leakage),
-    but build retrieval index on ALL corpus documents.
-
-    corpus.jsonl format (BEIR-like):
-      {"_id": "...", "title": "...", "text": "..."}  (or "id" instead of "_id")
-
-    qrels/train.tsv format (NO header):
-      query_id \t doc_id \t relevance
-    """
-
     def __init__(
         self,
         corpus_path: Union[str, Path],
