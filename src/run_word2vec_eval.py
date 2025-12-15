@@ -1,27 +1,12 @@
-# scripts/run_word2vec_eval.py
-# ============================================================
-# Word2Vec retrieval baseline evaluation (BEIR-format)
-# - Train Word2Vec ONLY on docs from qrels/train.tsv (no leakage)
-# - Evaluate on queries in qrels/test.tsv
-# - Use evaluation.traditional_eval (supports multi-ground-truth)
-# ============================================================
-
 from __future__ import annotations
-
 from pathlib import Path
 from typing import Dict, Set
 import json
 import pandas as pd
-
 from Word2Vec_Baseline import Word2VecRetriever
 from evaluation import traditional_eval
 
-
 def load_queries_jsonl(path: Path) -> Dict[str, str]:
-    """
-    queries.jsonl: {"_id": "...", "text": "..."} (or "id")
-    -> {query_id: query_text}
-    """
     q: Dict[str, str] = {}
     with path.open("r", encoding="utf-8") as f:
         for line in f:
@@ -51,10 +36,7 @@ def load_qrels_no_header(path: Path) -> Dict[str, Set[str]]:
 
 def main():
     print("[1] script started")
-
-    # -------------------------
-    # Part A: paths (your BEIR format)
-    # -------------------------
+    # Part A: paths 
     project_root = Path(r"D:\project\semantic-retrieval")
     beir_dir = project_root / "data" / "processed" / "beir_format"
     qrels_dir = beir_dir / "qrels"
@@ -64,18 +46,14 @@ def main():
     train_qrels = qrels_dir / "train.tsv"
     test_qrels  = qrels_dir / "test.tsv"
 
-    # -------------------------
     # Part B: load queries + test qrels
-    # -------------------------
     print("[2] loading queries + test qrels...")
     queries = load_queries_jsonl(queries_path)
     gt_test = load_qrels_no_header(test_qrels)
     print(f"[2] queries loaded: {len(queries)}")
     print(f"[2] test qids with qrels: {len(gt_test)}")
 
-    # -------------------------
-    # Part C: build retriever (train on train.tsv only)
-    # -------------------------
+    # Part C: build retriever (train on train.tsv)
     print("[3] building retriever (train word2vec on train qrels docs only)...")
     retriever = Word2VecRetriever(
         corpus_path=corpus_path,
@@ -90,9 +68,7 @@ def main():
     )
     print("[4] retriever ready")
 
-    # -------------------------
     # Part D: build samples for evaluation.py
-    # -------------------------
     k = 10
     samples = []
     missing_q = 0
@@ -108,8 +84,8 @@ def main():
 
         samples.append({
             "question": qtext,
-            "contexts": top_docs,     # List[str] ranked doc_ids
-            "ground_truth": gt_docs,  # Set[str] multi relevant
+            "contexts": top_docs, 
+            "ground_truth": gt_docs, 
         })
 
         if i % 200 == 0:
@@ -117,15 +93,12 @@ def main():
 
     print(f"[5] done. missing query text: {missing_q}")
 
-    # -------------------------
     # Part E: evaluate via evaluation.py
-    # -------------------------
     print("[6] running evaluation via evaluation.py...")
     metrics = traditional_eval(samples, k=k)
 
     print("=== Word2Vec Retrieval Baseline (BEIR train/test) ===")
     for key, val in metrics.items():
-        # N 是 float（我之前改成 float 了），打印时做兼容
         if key == "N":
             print(f"{key}: {int(val)}")
         else:
