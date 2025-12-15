@@ -6,6 +6,7 @@ import pandas as pd
 from Word2Vec_Baseline import Word2VecRetriever
 from evaluation import traditional_eval
 
+
 def load_queries_jsonl(path: Path) -> Dict[str, str]:
     q: Dict[str, str] = {}
     with path.open("r", encoding="utf-8") as f:
@@ -25,7 +26,9 @@ def load_qrels_no_header(path: Path) -> Dict[str, Set[str]]:
     qrels/*.tsv (NO header): query_id \t doc_id \t relevance
     -> {query_id: set(relevant_doc_ids)}
     """
-    df = pd.read_csv(path, sep="\t", header=None, names=["query_id", "doc_id", "relevance"])
+    df = pd.read_csv(
+        path, sep="\t", header=None, names=["query_id", "doc_id", "relevance"]
+    )
     df = df[df["relevance"] > 0]
 
     gt: Dict[str, Set[str]] = {}
@@ -36,15 +39,15 @@ def load_qrels_no_header(path: Path) -> Dict[str, Set[str]]:
 
 def main():
     print("[1] script started")
-    # Part A: paths 
-    project_root = Path(r"D:\project\semantic-retrieval")
+    # Part A: paths
+    project_root = Path(__file__).resolve().parents[1]
     beir_dir = project_root / "data" / "processed" / "beir_format"
     qrels_dir = beir_dir / "qrels"
 
     corpus_path = beir_dir / "corpus.jsonl"
     queries_path = beir_dir / "queries.jsonl"
     train_qrels = qrels_dir / "train.tsv"
-    test_qrels  = qrels_dir / "test.tsv"
+    test_qrels = qrels_dir / "test.tsv"
 
     # Part B: load queries + test qrels
     print("[2] loading queries + test qrels...")
@@ -82,11 +85,13 @@ def main():
 
         top_docs = retriever.retrieve(qtext, top_k=k)
 
-        samples.append({
-            "question": qtext,
-            "contexts": top_docs, 
-            "ground_truth": gt_docs, 
-        })
+        samples.append(
+            {
+                "question": qtext,
+                "contexts": top_docs,
+                "ground_truth": gt_docs,
+            }
+        )
 
         if i % 200 == 0:
             print(f"[5] processed {i}/{len(gt_test)}")
@@ -103,6 +108,37 @@ def main():
             print(f"{key}: {int(val)}")
         else:
             print(f"{key}: {val:.4f}")
+
+    # Part F: save results in unified format
+    print("[7] saving results to JSON...")
+    results_dir = project_root / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    unified_results = {
+        "model_name": "Word2Vec Baseline",
+        "model_type": "word2vec",
+        "parameters": {
+            "vector_size": 300,
+            "window": 5,
+            "min_count": 2,
+            "sg": 1,
+        },
+        "metrics": {
+            f"Hit@{k}": metrics.get(f"Hit@{k}", 0.0),
+            f"Precision@{k}": metrics.get(f"Precision@{k}", 0.0),
+            f"Recall@{k}": metrics.get(f"Recall@{k}", 0.0),
+            "MRR": metrics.get("MRR", 0.0),
+            f"MAP@{k}": metrics.get(f"MAP@{k}", 0.0),
+            f"NDCG@{k}": metrics.get(f"NDCG@{k}", 0.0),
+            "N": int(metrics.get("N", 0)),
+        },
+    }
+
+    results_path = results_dir / "word2vec_results.json"
+    with results_path.open("w", encoding="utf-8") as f:
+        json.dump(unified_results, f, indent=2, ensure_ascii=False)
+
+    print(f"[7] results saved to: {results_path}")
 
 
 if __name__ == "__main__":
