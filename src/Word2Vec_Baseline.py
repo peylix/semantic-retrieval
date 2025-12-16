@@ -1,14 +1,21 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import List, Tuple, Union, Optional, Dict, Set
+from typing import List, Tuple, Union, Optional, Dict, Set, Any
 import re
 import json
 import numpy as np
 import pandas as pd
 from gensim.models import Word2Vec
-from sklearn.metrics.pairwise import cosine_similarity
 
+# BEIR
+from beir.datasets.data_loader import GenericDataLoader
+from beir.retrieval.evaluation import EvaluateRetrieval
+from beir.retrieval.search.dense import DenseRetrievalExactSearch
+
+
+# =========================
 # Part A: Tokenize
+# =========================
 _TOKEN_RE = re.compile(r"[^a-z0-9\s]+")
 
 def tokenize(text: str) -> List[str]:
@@ -16,7 +23,10 @@ def tokenize(text: str) -> List[str]:
     text = _TOKEN_RE.sub("", text)
     return text.split()
 
+
+# =========================
 # Part B: Sentence embedding
+# =========================
 def sentence_embedding(text: str, w2v: Word2Vec) -> np.ndarray:
     tokens = tokenize(text)
     vecs = [w2v.wv[t] for t in tokens if t in w2v.wv]
@@ -25,6 +35,9 @@ def sentence_embedding(text: str, w2v: Word2Vec) -> np.ndarray:
     return np.mean(vecs, axis=0).astype(np.float32)
 
 
+# =========================
+# Word2Vec Retriever (train + precompute corpus embeddings)
+# =========================
 class Word2VecRetriever:
     def __init__(
         self,
@@ -72,8 +85,7 @@ class Word2VecRetriever:
 
     def _build_training_texts_from_train_qrels(self) -> List[str]:
         if self.train_qrels_tsv_path is None:
-            # fallback (not recommended): use full corpus
-            return self.documents
+            return self.documents  # fallback
 
         df = pd.read_csv(
             self.train_qrels_tsv_path,
@@ -100,7 +112,6 @@ class Word2VecRetriever:
                     continue
                 obj = json.loads(line)
 
-                # BEIR usually uses "_id"
                 did = obj.get("_id", obj.get("id"))
                 if did is None:
                     raise ValueError("corpus.jsonl line missing '_id' (or 'id').")
@@ -114,8 +125,142 @@ class Word2VecRetriever:
 
         return doc_ids, docs
 
-    def retrieve(self, query: str, top_k: int = 10) -> List[str]:
-        q_emb = sentence_embedding(query, self.w2v).reshape(1, -1)
-        sims = cosine_similarity(q_emb, self.corpus_embeddings)[0]
-        top_idx = np.argsort(sims)[::-1][:top_k]
-        return [self.doc_ids[i] for i in top_idx]
+
+# =========================
+# BEIR wrapper for Word2Vec (encode_corpus / encode_queries)
+# =========================
+class Word2VecBEIRWrapper:
+    def __init__(self, w2v_model: Word2Vec):
+        self.w2v = w2v_model
+
+    def _to_text(self, item: Any) -> str:
+        if isinstance(item, dict):
+            title = item.get("title", "")
+            text = item.get("text", "")
+            return (str(title).strip() + "\n" + str(text).strip()).strip()
+        return str(item)
+
+    def encode_corpus(self, corpus, batch_size: int = 64, **kwargs):
+        texts = [self._to_text(doc) for doc in corpus]
+        return np.vstack([sentence_embedding(t, self.w2v) for t in texts]).astype(np.float32)
+
+    def encode_queries(self, queries, batch_size: int = 64, **kwargs):
+        texts = [self._to_text(q) for q in queries]
+        return np.vstack([sentence_embedding(t, self.w2v) for t in texts]).astype(np.float32)
+
+
+# =========================
+# Evaluate Word2Vec using BEIR (same metric set as zeroshot_metrics)
+# =========================
+def evaluate_word2vec_beir(
+    beir_model: Any,
+    data_dir: Path,
+    split: str = "test",
+    k: int = 10,
+    batch_size: int = 64,
+) -> Dict[str, float]:
+    corpus, queries, qrels = GenericDataLoader(str(data_dir)).load(split=split)
+
+    dres = DenseRetrievalExactSearch(beir_model, batch_size=batch_size)
+    retriever = EvaluateRetrieval(dres, score_function="cos_sim")
+
+    results = retriever.retrieve(corpus, queries)
+
+    ndcg, _map, recall, precision = retriever.evaluate(qrels, results, k_values=[10, 100])
+
+    def hit_and_mrr_at_k(k_val: int):
+        hits, mrrs = [], []
+        for qid, doc_scores in results.items():
+            top_docs = [
+                doc_id
+                for doc_id, _ in sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)[:k_val]
+            ]
+            rels = qrels.get(qid, {})
+            rel_set = set(rels.keys()) if isinstance(rels, dict) else set(rels)
+
+            hits.append(1.0 if any(d in rel_set for d in top_docs) else 0.0)
+
+            mrr_val = 0.0
+            for rank, doc_id in enumerate(top_docs, start=1):
+                if doc_id in rel_set:
+                    mrr_val = 1.0 / rank
+                    break
+            mrrs.append(mrr_val)
+
+        n = len(hits) if hits else 1
+        return sum(hits) / n, sum(mrrs) / n
+
+    hit10, mrr10 = hit_and_mrr_at_k(10)
+
+    metrics = {
+        "NDCG@10": float(ndcg.get("NDCG@10", 0.0)),
+        "NDCG@100": float(ndcg.get("NDCG@100", 0.0)),
+        "MAP@10": float(_map.get("MAP@10", 0.0)),
+        "MAP@100": float(_map.get("MAP@100", 0.0)),
+        "Recall@10": float(recall.get("Recall@10", 0.0)),
+        "Recall@100": float(recall.get("Recall@100", 0.0)),
+        "Precision@10": float(precision.get("P@10", 0.0)),
+        "Precision@100": float(precision.get("P@100", 0.0)),
+        "Hit@10": float(hit10),
+        "MRR": float(mrr10),
+        "N": float(len(queries)),
+    }
+    return metrics
+
+
+# =========================
+# MAIN: run evaluation + save JSON in loader-compatible format
+# =========================
+if __name__ == "__main__":
+    # ---- EDIT THIS to your local BEIR dataset root ----
+    BEIR_DIR = Path("../data/processed/beir_format")  # must contain corpus.jsonl, queries.jsonl, qrels/train.tsv, qrels/test.tsv
+
+    corpus_path = BEIR_DIR / "corpus.jsonl"
+    train_qrels_path = BEIR_DIR / "qrels" / "train.tsv"
+
+    # 1) Train Word2Vec on TRAIN relevant docs
+    retriever = Word2VecRetriever(
+        corpus_path=corpus_path,
+        train_qrels_tsv_path=train_qrels_path,
+        vector_size=300,
+        window=5,
+        min_count=2,
+        sg=1,
+        workers=4,
+        model_path=None,      # optionally: Path("./results/word2vec.model")
+        rebuild_model=False,
+    )
+
+    # 2) BEIR wrapper
+    w2v_beir_model = Word2VecBEIRWrapper(retriever.w2v)
+
+    # 3) Evaluate on TEST (k=10 + k=100 metrics)
+    word2vec_metrics = evaluate_word2vec_beir(
+        beir_model=w2v_beir_model,
+        data_dir=BEIR_DIR,
+        split="test",
+        k=10,
+        batch_size=64,
+    )
+
+    print("Word2Vec metrics:")
+    print(word2vec_metrics)
+
+    # 4) Save JSON so load_baseline_results() can read it
+    # load_baseline_results() expects: {"model_name": ..., "metrics": {...}, ...}
+    results_dir = Path("./results")
+    results_dir.mkdir(exist_ok=True)
+
+    out_path = results_dir / "word2vec_results.json"
+
+    payload = {
+        "model_name": "Word2Vec Baseline",
+        "model_type": "Word2Vec",
+        "base_model": "gensim-word2vec",
+        "metrics": word2vec_metrics,
+    }
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+    print("Saved loader-compatible JSON to:", out_path.resolve())
