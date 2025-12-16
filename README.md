@@ -36,6 +36,37 @@ To answer these questions, we build and evaluate a semantic retrieval pipeline o
 
 ---
 
+## How to Run
+
+### Baseline Models
+
+Before running the semantic retrieval notebook, you need to run the following baseline models to generate their results for comparison. Note that the `uv` package manager is used to handle dependencies and execution.
+
+1. **Word2Vec**:
+   ```bash
+   uv run src/embedding_model/word2vec.py
+   ```
+   - Output: `results/word2vec_results.json`
+2. **Zero-shot MiniLM**:
+   ```bash
+   uv run src/embedding_model/zero_shot.py
+   ```
+   - Output: `results/zero_shot_results.json`
+
+### Jupyter Notebook
+
+This project now provides a Jupyter Notebook version for easy demonstration and training on platforms like Google Colab.
+
+We recommand using [Google Colab](https://colab.research.google.com/) for easy access to free GPU resources.
+
+For running the notebook locally:
+
+```bash
+   uv run jupyter notebook semantic_retrieval.ipynb
+   ```
+
+---
+
 ## Models and Training Strategy
 
 We evaluate four retrieval models with increasing levels of sophistication:
@@ -121,35 +152,4 @@ Although the performance gains are relatively small, they are **consistent acros
   - Cross-encoder re-ranking for improved early precision
   - Adaptive or curriculum-based hard negative mining
   - Scaling to larger embedding models and domain-specific datasets
-
----
-
-## How to Run
-
-### Baseline Models
-
-Before running the semantic retrieval notebook, you need to run the following baseline models to generate their results for comparison. Note that the `uv` package manager is used to handle dependencies and execution.
-
-1. **Word2Vec**:
-   ```bash
-   uv run src/embedding_model/word2vec.py
-   ```
-   - Output: `results/word2vec_results.json`
-2. **Zero-shot MiniLM**:
-   ```bash
-   uv run src/embedding_model/zero_shot.py
-   ```
-   - Output: `results/zero_shot_results.json`
-
-### Jupyter Notebook
-
-This project now provides a Jupyter Notebook version for easy demonstration and training on platforms like Google Colab.
-
-We recommand using [Google Colab](https://colab.research.google.com/) for easy access to free GPU resources.
-
-For running the notebook locally:
-
-```bash
-   uv run jupyter notebook semantic_retrieval_notebook.ipynb
-   ```
 
