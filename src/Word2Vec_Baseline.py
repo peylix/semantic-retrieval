@@ -248,7 +248,7 @@ if __name__ == "__main__":
 
     # 4) Save JSON so load_baseline_results() can read it
     # load_baseline_results() expects: {"model_name": ..., "metrics": {...}, ...}
-    results_dir = Path("./results")
+    results_dir = Path("./word2vec_results")
     results_dir.mkdir(exist_ok=True)
 
     out_path = results_dir / "word2vec_results.json"
