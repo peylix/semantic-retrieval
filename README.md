@@ -2,8 +2,6 @@
 
 This project investigates how modern neural embedding models and training strategies can significantly improve semantic retrieval performance for scientific documents. Starting from a traditional Word2Vec baseline, we progressively enhance retrieval accuracy through pre-trained sentence embeddings, supervised fine-tuning, and hard negative mining.
 
----
-
 ## Motivation
 
 Traditional information retrieval methods such as TF-IDF or Word2Vec rely on shallow, context-independent representations. While computationally efficient, these methods struggle to capture the complex semantic relationships present in scientific text.
@@ -15,8 +13,6 @@ The goal of this project is to answer the following questions:
 - Does incorporating hard negative samples further improve retrieval quality, and if so, how?
 
 To answer these questions, we build and evaluate a semantic retrieval pipeline on the **SciFact** dataset using a series of increasingly powerful models.
-
----
 
 ## Dataset and Models
 
@@ -33,8 +29,6 @@ To answer these questions, we build and evaluate a semantic retrieval pipeline o
 - **all-MiniLM-L6-v2**
   - A pre-trained sentence embedding model from Hugging Face, designed for efficient semantic search.
   - Model link: https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
-
----
 
 ## How to Run
 
@@ -65,8 +59,6 @@ For running the notebook locally:
    uv run jupyter notebook semantic_retrieval.ipynb
    ```
 
----
-
 ## Models and Training Strategy
 
 We evaluate four retrieval models with increasing levels of sophistication:
@@ -96,8 +88,6 @@ We evaluate four retrieval models with increasing levels of sophistication:
 - Hard negatives are semantically similar but non-relevant documents
 - Encourages the model to learn finer-grained semantic distinctions
 
----
-
 ## Evaluation Metrics
 
 All models are evaluated using standard BEIR retrieval metrics:
@@ -107,8 +97,6 @@ All models are evaluated using standard BEIR retrieval metrics:
 - MRR
 - MAP@10 / MAP@100
 - NDCG@10 / NDCG@100
-
----
 
 ## Results: Model Comparison
 
@@ -133,8 +121,6 @@ Hard negative mining improves retrieval performance by introducing more challeng
 
 Although the performance gains are relatively small, they are **consistent across all metrics**, which is expected when improving an already strong retrieval model.
 
----
-
 ## Key Takeaways
 
 - Modern sentence embedding models dramatically outperform traditional Word2Vec retrieval
@@ -142,7 +128,6 @@ Although the performance gains are relatively small, they are **consistent acros
 - Hard negative mining provides stable and meaningful improvements in high-performance regimes
 - Training strategy and data quality are as important as model architecture in neural retrieval systems
 
----
 
 ## Limitations and Future Work
 
