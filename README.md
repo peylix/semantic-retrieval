@@ -18,15 +18,21 @@ To answer these questions, we build and evaluate a semantic retrieval pipeline o
 
 ---
 
-## Dataset
+## Dataset and Models
 
-- **SciFact (BEIR – Generated Queries)**  
-  A scientific fact verification dataset containing claims and supporting documents, augmented with automatically generated queries for retrieval evaluation.
+- **SciFact (BEIR – Generated Queries)**
+  - A scientific fact verification dataset containing claims and supporting documents, augmented with automatically generated queries for retrieval evaluation.
+  - Dataset link: https://huggingface.co/datasets/BeIR/scifact-generated-queries
+  - The dataset is converted into **BEIR-compatible format** to enable standardized and reproducible retrieval evaluation.
 
-- HuggingFace dataset link:  
-  https://huggingface.co/datasets/BeIR/scifact-generated-queries
+- **Word2Vec**
+  - A traditional word embedding model trained on the SciFact corpus.
+  - Serves as a baseline for comparison.
+  - Model link: https://radimrehurek.com/gensim/auto_examples/tutorials/run_word2vec.html
 
-- The dataset is converted into **BEIR-compatible format** to enable standardized and reproducible retrieval evaluation.
+- **all-MiniLM-L6-v2**
+  - A pre-trained sentence embedding model from Hugging Face, designed for efficient semantic search.
+  - Model link: https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
 
 ---
 
@@ -119,4 +125,31 @@ Although the performance gains are relatively small, they are **consistent acros
 ---
 
 ## How to Run
+
+### Baseline Models
+
+Before running the semantic retrieval notebook, you need to run the following baseline models to generate their results for comparison. Note that the `uv` package manager is used to handle dependencies and execution.
+
+1. **Word2Vec**:
+   ```bash
+   uv run src/embedding_model/word2vec.py
+   ```
+   - Output: `results/word2vec_results.json`
+2. **Zero-shot MiniLM**:
+   ```bash
+   uv run src/embedding_model/zero_shot.py
+   ```
+   - Output: `results/zero_shot_results.json`
+
+### Jupyter Notebook
+
+This project now provides a Jupyter Notebook version for easy demonstration and training on platforms like Google Colab.
+
+We recommand using [Google Colab](https://colab.research.google.com/) for easy access to free GPU resources.
+
+For running the notebook locally:
+
+```bash
+   uv run jupyter notebook semantic_retrieval_notebook.ipynb
+   ```
 
