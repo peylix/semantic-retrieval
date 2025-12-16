@@ -10,6 +10,7 @@ dependencies = [
     "bm25s>=0.2.14",
     "datasets>=4.4.1",
     "gensim>=4.4.0",
+    "jupytext>=1.18.1",
     "matplotlib>=3.10.7",
     "notebook>=7.5.0",
     "numpy>=2.2.6",
