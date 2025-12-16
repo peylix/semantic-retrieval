@@ -24,8 +24,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============== Configuration ==============
-# MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-MODEL_NAME = "BAAI/bge-small-en-v1.5"
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+# MODEL_NAME = "BAAI/bge-small-en-v1.5"
 BATCH_SIZE = 32
 EPOCHS = 6
 WARMUP_RATIO = 0.1
